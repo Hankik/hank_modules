@@ -36,6 +36,17 @@ make_obj :: (position : Vector2 = .{0,0}, children : []*Obj = *Obj.[], tags : []
     return obj;
 }
 
+remove_obj :: (obj : *Obj) {
+    id := obj.id;
+    for tag : obj.tags.* free(tag);
+    for child : obj.children.* remove_obj(child);
+    if obj.parent != null { array_unordered_remove_by_value(obj.parent.children, obj, true); }
+    free(obj.tags);
+    free(obj.children);
+    free(obj);
+    print("[H]: obj with id % has been removed successfully\n", id);
+}
+
 find_obj_tag :: (obj: *Obj, $tag_type: Type) -> bool, *tag_type {
     for tag : obj.tags.* {
         if tag.tag_type == type_info(tag_type).name { return true, cast(*tag_type) tag; }
@@ -69,11 +80,11 @@ add_child :: (parent: *Obj, child : *Obj) {
 }
 
 
-obj_tick :: (obj: *Obj) {
-    for tag : obj.tags.* if tag.enabled { tag.tick_fn(tag); }
+obj_tick :: (obj: *Obj, dt: float) {
+    for tag : obj.tags.* if tag.enabled { tag.tick_fn(tag, dt); }
     for i : 0..obj.children.count-1 {
         child := obj.children.*[i];
-        if child.enabled obj_tick(child);
+        if child.enabled obj_tick(child, dt);
     } 
     
 }
@@ -144,7 +155,7 @@ msg_down :: (obj: *Obj, msg: *Msg) -> bool {
 Tag :: struct {
     tag_type : string = "Tag";
     obj : *Obj;
-    tick_fn : (tag: *Tag) = tag_tick;
+    tick_fn : (tag: *Tag, dt: float) = tag_tick;
     draw_fn : (tag: *Tag) = tag_draw;
     on_get_msg_fn : (tag: *Tag, msg: *Msg) -> bool = on_tag_get_msg;
     enabled : bool = true;
@@ -164,7 +175,7 @@ make_mask :: ($T: Type) -> *Mask(T) {
     return mask;
 }
 
-tag_tick :: (tag: *Tag) {}
+tag_tick :: (tag: *Tag, dt: float) {}
 tag_draw :: (tag: *Tag) {}
 on_tag_get_msg :: (tag: *Tag, msg: *Msg) -> bool { return false; }
 
