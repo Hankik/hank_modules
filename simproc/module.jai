@@ -11,7 +11,22 @@ DrawSettings :: struct {
 
 #add_context draw_settings := DrawSettings.{};
 
+image :: (texture: *Simp.Texture, position: Vector2, size: Vector2) {
+    Simp.set_shader_for_images(texture);
+    old_settings := context.draw_settings;
+    context.draw_settings.fill_enabled = true;
+    Simp.immediate_quad(
+        position.x - size.x * 0.5,
+        position.y - size.y * 0.5,
+        position.x + size.x * 0.5,
+        position.y + size.y * 0.5,
+        context.draw_settings.fill
+    );
+    context.draw_settings = old_settings;
+}
+
 rect :: (position: Vector2, size: Vector2) {
+    Simp.set_shader_for_color();
     using context.draw_settings;
     if context.draw_settings.fill_enabled {
         Simp.immediate_quad(
@@ -52,5 +67,5 @@ rect :: (position: Vector2, size: Vector2) {
             stroke
         );
     }
-
+    
 }
