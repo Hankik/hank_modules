@@ -39,10 +39,22 @@ no_stroke :: () {
 
 #add_context draw_settings := DrawSettings.{};
 
-text :: (text: string, position: Vector2) {
+TextAlignment :: enum {
+    LEFT;
+    CENTER;
+    RIGHT;
+}
+
+text :: (text: string, position: Vector2, alignment : TextAlignment = .CENTER) {
     using context.draw_settings;
-    Simp.prepare_text(font, text, .SMALLCAPS | .LINING_FIGURES | .LEFT_JUSTIFIED);
-    Simp.draw_prepared_text(font, cast(s64) position.x, cast(s64) position.y, fill);
+    width := Simp.prepare_text(font, text);
+    offset : s64;
+    if alignment == {
+        case .LEFT; offset = 0;
+        case .RIGHT; offset = width;
+        case .CENTER; offset = cast(s64) (width * 0.5);
+    }
+    Simp.draw_prepared_text(font, cast(s64) (position.x - offset), cast(s64) position.y, fill);
 }
 
 circle :: (position: Vector2, radius: float, segments: s32 = 20) {
