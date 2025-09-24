@@ -7,9 +7,43 @@ DrawSettings :: struct {
     stroke_width : float = 2.0;
     fill_enabled : bool = true;
     stroke_enabled : bool = true;
+    font : *Simp.Dynamic_Font = null;
+    text_size : float = 14.0;
+}
+
+fill :: (color: Vector4) {
+    context.draw_settings.fill = color;
+    context.draw_settings.fill_enabled = true;
+}
+
+stroke :: (color: Vector4) {
+    context.draw_settings.stroke = color;
+    context.draw_settings.stroke_enabled = true;
+}
+
+font :: (font: *Simp.Dynamic_Font) {
+    context.draw_settings.font = font;
+}
+
+stroke_width :: (width : float) {
+    context.draw_settings.stroke_width = width;
+}
+
+no_fill :: () {
+    context.draw_settings.fill_enabled = false;
+}
+
+no_stroke :: () {
+    context.draw_settings.stroke_enabled = false;
 }
 
 #add_context draw_settings := DrawSettings.{};
+
+text :: (text: string, position: Vector2) {
+    using context.draw_settings;
+    Simp.prepare_text(font, text, .SMALLCAPS | .LINING_FIGURES | .LEFT_JUSTIFIED);
+    Simp.draw_prepared_text(font, cast(s64) position.x, cast(s64) position.y, fill);
+}
 
 circle :: (position: Vector2, radius: float, segments: s32 = 20) {
     Simp.set_shader_for_color();
@@ -26,30 +60,28 @@ circle :: (position: Vector2, radius: float, segments: s32 = 20) {
             x1 := position.x + radius * cos(angle1);
             y1 := position.y + radius * sin(angle1);
             uv1 : Vector2 = .{(cos(angle1) * 0.5) + 0.5, (sin(angle1) * 0.5) + 0.5};
-            Simp.immediate_vertex(.{x1, y1, 0.0}, fill, uv1, .{});
+            Simp.immediate_vertex(.{x1, y1, 0.0}, fill, uv1, .{z=1});
             
             // Next perimeter vertex
             angle2 := 2 * 3.14159 * (i + 1) / segments;
             x2 := position.x + radius * cos(angle2);
             y2 := position.y + radius * sin(angle2);
             uv2 : Vector2 = .{(cos(angle2) * 0.5) + 0.5, (sin(angle2) * 0.5) + 0.5};
-            Simp.immediate_vertex(.{x2, y2, 0.0}, fill, uv2, .{});
+            Simp.immediate_vertex(.{x2, y2, 0.0}, fill, uv2, .{z=1});
         }
     }
     
     if stroke_enabled {
         for i : 0..segments-1 {
-            // Center vertex
             
-            // Current perimeter vertex
             angle1 := 2 * 3.14159 * i / segments;
             x1 := position.x + radius * cos(angle1);
             y1 := position.y + radius * sin(angle1);
-            
-            // Next perimeter vertex
+
             angle2 := 2 * 3.14159 * (i + 1) / segments;
             x2 := position.x + radius * cos(angle2);
             y2 := position.y + radius * sin(angle2);
+            
             mid_point := .{x1 + x2, y1 + y2} * 0.5;
             line_normal := normalize(Vector2.{mid_point.x - position.x, mid_point.y - position.y});
             line_dir := Vector2.{-line_normal.y, line_normal.x};
