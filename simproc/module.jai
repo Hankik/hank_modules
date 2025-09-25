@@ -1,6 +1,8 @@
 Simp :: #import "Simp";
 #import "Math";
 
+#add_context draw_settings := DrawSettings.{};
+
 DrawSettings :: struct {
     fill : Vector4 = .{1.0,1.0,1.0,1.0};
     stroke : Vector4 = .{.0,.0,.0,.0};
@@ -37,7 +39,6 @@ no_stroke :: () {
     context.draw_settings.stroke_enabled = false;
 }
 
-#add_context draw_settings := DrawSettings.{};
 
 TextAlignment :: enum {
     LEFT;

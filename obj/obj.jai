@@ -64,6 +64,15 @@ find_child_by_tag :: (obj: *Obj, $tag_type: Type) -> bool, *Obj, *tag_type {
     return false, null, null;
 }
 
+find_children_with_tag :: (obj: *Obj, $tag_type: Type, recursive: bool = false) -> []*Obj {
+    found_children : [..]*Obj;
+    for child : obj.children.* {
+        success := find_obj_tag(child, tag_type);
+        if success array_add(*found_children, child);
+    }
+    return found_children;
+}
+
 get_global_pos :: (obj : *Obj) -> Vector2 {
     sum := obj.local_pos;
     current_parent := obj.parent;
@@ -72,6 +81,11 @@ get_global_pos :: (obj : *Obj) -> Vector2 {
         current_parent = current_parent.parent;
     }
     return sum;
+}
+
+set_global_pos :: (obj: *Obj, position: Vector2) {
+    difference := position - get_global_pos(obj);
+    obj.local_pos += difference;
 }
 
 add_child :: (parent: *Obj, child : *Obj) {
