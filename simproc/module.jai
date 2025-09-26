@@ -55,7 +55,7 @@ text :: (text: string, position: Vector2, alignment : TextAlignment = .CENTER) {
         case .RIGHT; offset = width;
         case .CENTER; offset = cast(s64) (width * 0.5);
     }
-    Simp.draw_prepared_text(font, cast(s64) (position.x - offset), cast(s64) position.y, fill);
+    Simp.draw_prepared_text(font, cast(s64) (position.x - offset), cast(s64) (position.y + font.y_offset_for_centering), fill);
 }
 
 circle :: (position: Vector2, radius: float, segments: s32 = 20) {
