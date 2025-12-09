@@ -12,32 +12,28 @@ pop :: () {
     transform_stack_top -= 1;
 }
 
-rotate :: (theta : float) {
+rotate :: (theta : float, axis : Vector3 = .{z=1.0}) {
     using context.draw_settings;
 
     top := transform_stack.*[transform_stack_top];
-    axis := Vector3.{z=1.0};
     q := Quaternion.{};
     set_from_axis_and_angle(*q, axis, theta);
-    m := rotation_matrix(Matrix3, q);
+    m := rotation_matrix(Matrix4, q);
     transform_stack.*[transform_stack_top] = top * m;
 }
 
 scale :: (new_scale: Vector2) {
     using context.draw_settings;
-    scale(
-        *transform_stack.*[transform_stack_top], // matrix3 pointer
-        Vector3.{new_scale.x, new_scale.y, 0.0}  // vector3 value
-    );
+    top := transform_stack.*[transform_stack_top];
+    m := make_scale_matrix4(.{new_scale.x, new_scale.y, 1.0});
+    transform_stack.*[transform_stack_top] = top * m;
 }
 
 translate :: (translation : Vector2) {
     using context.draw_settings;
-    top_matrix := transform_stack.*[transform_stack_top];
+    top := transform_stack.*[transform_stack_top];
 
-    // Directly add translation
-    top_matrix._13 += translation.x;
-    top_matrix._23 += translation.y;
+    m := make_translation_matrix4(.{translation.x, translation.y, 0.0});
 
-    transform_stack.*[transform_stack_top] = top_matrix;
+    transform_stack.*[transform_stack_top] = top * m;
 }

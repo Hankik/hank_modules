@@ -2,23 +2,35 @@
 #import "Math";
 #import "Hash_Table";
 #import "Sort";
+#import "String";
+// #import "Bucket_Array";
 
+
+
+TAGGED_OBJ_ARR_TYPE :: [..]Pair(string, [..]Handle(Obj));
 #add_context id_counter : int = 0;
 #add_context obj_table : Table(Key_Type=int, Value_Type=*Obj);
 #add_context obj_array : *[1024 * 16]Obj;
-#add_context tagged_obj_table : *Table(Key_Type=string, Value_Type=*[..]Handle(Obj));
-#add_context empty_obj_handle_arr : *[..]Handle(Obj) = ---;
+#add_context tagged_obj_array : *TAGGED_OBJ_ARR_TYPE;
+#add_context empty_obj_handle_arr : [..]Handle(Obj) = ---;
 
-setup_obj_module :: () {
+init_obj :: () {
     context.obj_array = New([1024 * 16]Obj);
-    context.tagged_obj_table = New(Table(Key_Type=string, Value_Type=*[..]Handle(Obj)));
-    context.empty_obj_handle_arr = New([..]Handle(Obj));
+    context.tagged_obj_array = New(TAGGED_OBJ_ARR_TYPE);
+    //context.empty_obj_handle_arr = [..]Handle(Obj);
 }
 
 Handle :: struct (return_type:Type) {
     index: int = -1;
     type: Type : return_type;
 }
+
+
+Pair :: struct (first: $T, second: $U) {
+    a: first;
+    b: second;
+}
+
 
 
 operator == :: (x: Handle(Obj), y: Handle(Obj)) -> bool {
@@ -34,8 +46,11 @@ Obj :: struct {
     enabled : bool = false;
     draw_layer : int = 0;
 }
+//find_objs_with_tag :: ($tag_type : Type) -> []Handle(Obj), arr_index: int {
+make_tag :: ($type: Type) -> Handle($type) { 
+}
 
-make_obj :: (position : Vector2 = .{0,0}, children : []*Obj = *Obj.[], tags : []*Tag = *Tag.[]) -> Handle(Obj), *Obj {
+make_obj :: (position : Vector2 = .{0,0}, children : []Handle(Obj) = Handle(Obj).[], tags : []*Tag = *Tag.[]) -> Handle(Obj), *Obj {
     obj := *context.obj_array.*[context.id_counter];
     obj.* = Obj.{};
     obj.local_pos = position;
@@ -44,8 +59,9 @@ make_obj :: (position : Vector2 = .{0,0}, children : []*Obj = *Obj.[], tags : []
     context.id_counter = obj.handle.index + 1;
     obj.children = New([..]Handle(Obj));
     obj.tags = New([..]*Tag);
-    for child : children { 
-        array_add(obj.children, child.handle);
+    for child_handle : children { 
+        found_child, child := find_obj(child_handle);
+        array_add(obj.children, child_handle);
         child.parent = obj.handle;
     }
     add_obj_tags(obj, tags);
@@ -53,15 +69,19 @@ make_obj :: (position : Vector2 = .{0,0}, children : []*Obj = *Obj.[], tags : []
     return obj.handle, obj;
 }
 
+
 remove_obj :: (obj : *Obj) {
     // handle := obj.handle;
     msg_down(obj.handle, OnRemoveMsg.{});
     for index : 0..obj.tags.count-1 {
         tag := obj.tags.*[index];
-        _, bucket := table_find_new(context.tagged_obj_table, tag.tag_type);
-        for handle, i : bucket.* {
+        tagged_arr, tagged_arr_index := find_objs_with_tag(tag.tag_type);
+        for handle, i : tagged_arr {
             if obj.handle == handle {
-                array_unordered_remove_by_index(bucket, i);
+                array_unordered_remove_by_index(
+                    *context.tagged_obj_array.*[tagged_arr_index].b,
+                    i
+                );
                 break;
             }
         }
@@ -93,31 +113,36 @@ add_obj_tags :: (obj: *Obj, tags: []*Tag) {
     for tag : tags {
         array_add(obj.tags, tag); 
         tag.obj = obj.handle;
-        found_bucket, bucket := table_find_new(context.tagged_obj_table, tag.tag_type);
-        if found_bucket {
-            array_add(bucket, obj.handle);
-        } else {
-            bucket := New([..]Handle(Obj));
-            array_add(bucket, obj.handle);
-            table_add(context.tagged_obj_table, tag.tag_type, bucket);
+        for context.tagged_obj_array.* {
+            if it.a == tag.tag_type {
+                array_add(*it.b, obj.handle);
+                continue tag;
+            }
+        }
+        obj_array : [..]Handle(Obj);
+        array_add(*obj_array, obj.handle);
+        array_add(context.tagged_obj_array, .{tag.tag_type, obj_array});
+    }
+}
 
+find_objs_with_tag :: ($tag_type : Type) -> []Handle(Obj), arr_index: int {
+    tagged_arr, tagged_arr_index := find_objs_with_tag(type_info(tag_type).name);
+    return tagged_arr, tagged_arr_index;
+}
+
+find_objs_with_tag :: (tag_type: string) -> []Handle(Obj), arr_index: int {
+    for context.tagged_obj_array.* {
+        if it.a == tag_type {
+            return it.b, it_index;
         }
     }
+    return context.empty_obj_handle_arr, -1;
 }
 
-get_objs_with_tag :: ($tag_type : Type) -> *[]Handle(Obj) {
-    success, bucket := table_find_new(context.tagged_obj_table, type_info(tag_type).name);
-    if success {
-        return bucket;
-    } else {
-        return context.empty_obj_handle_arr;
-    }
-}
-
-find_obj :: (handle : Handle(Obj)) -> success: bool, *Obj {
+find_obj :: (handle : Handle(Obj), require_enabled: bool = false) -> success: bool, *Obj {
     if (handle.index >= 0) {
         obj := *context.obj_array.*[handle.index];
-        return obj.enabled, (ifx obj.enabled then obj else null);
+        return true && (!require_enabled || obj.enabled), obj;
     } else {
         return false, null;
     }
@@ -133,14 +158,14 @@ find_obj :: (handle : Handle(Obj)) -> success: bool, *Obj {
 //     // return success, cast(*tag_type) tag;
 // }
 
-find_obj_tag :: (obj_handle: Handle(Obj), $tag_type: Type) -> bool, *tag_type {
+find_obj_tag :: (obj_handle: Handle(Obj), $tag_type: Type) -> bool, *tag_type, *Obj {
     found, obj := find_obj(obj_handle);
     if found {
         for tag : obj.tags.* {
-            if tag.tag_type == type_info(tag_type).name { return true, cast(*tag_type) tag; }
+            if tag.tag_type == type_info(tag_type).name { return true, cast(*tag_type) tag, obj;}
         }
     }
-    return false, null;
+    return false, null, null;
 }
 
 find_child_by_tag :: (obj_handle: Handle(Obj), $tag_type: Type) -> bool, *Obj, *tag_type {
@@ -163,18 +188,7 @@ find_children_with_tag :: (obj: *Obj, $tag_type: Type, recursive: bool = false) 
     return found_children;
 }
 
-// get_global_pos :: (obj : *Obj) -> Vector2 {
-//     sum := obj.local_pos;
-//     current_parent := obj.parent;
-//     while current_parent {
-//         sum += current_parent.local_pos;
-//         current_parent = current_parent.parent;
-//     }
-//     return sum;
-// }
-
-get_global_pos :: (obj_handle: Handle(Obj)) -> Vector2 {
-    found, obj := find_obj(obj_handle);
+get_global_pos :: (obj : *Obj) -> Vector2 {
     sum := obj.local_pos;
     found_parent, current_parent := find_obj(obj.parent);
     while found_parent {
@@ -182,6 +196,11 @@ get_global_pos :: (obj_handle: Handle(Obj)) -> Vector2 {
         found_parent, current_parent = find_obj(current_parent.parent);
     }
     return sum;
+}
+
+get_global_pos :: (obj_handle: Handle(Obj)) -> Vector2 {
+    found, obj := find_obj(obj_handle);
+    return get_global_pos(obj);
 }
 
 set_global_pos :: (obj_handle: Handle(Obj), position: Vector2) {
@@ -303,7 +322,7 @@ msg_down :: (obj_handle: Handle(Obj), msg: *Msg) -> bool {
 }
 
 
-Tag :: struct {
+Tag :: struct { 
     tag_type : string = "Tag";
     obj : Handle(Obj);
     tick_fn : (tag: *Tag, dt: float) = tag_tick;
@@ -311,7 +330,7 @@ Tag :: struct {
     on_get_msg_fn : (tag: *Tag, msg: *Msg) -> bool = on_tag_get_msg;
     enabled : bool = true;
     visible : bool = true;
-}
+} 
 
 Mask :: struct ($T : Type) {
     type : Type : T;
@@ -344,7 +363,86 @@ OnRemoveMsg :: struct {
     type = OnRemoveMsg;
 }
 
+// INSERTION_STRING represents the code we want to add to the target program.
+// We'll use print to insert useful things where the % markers are.
+INSERTION_STRING :: #string DONE
+
+// NUM_ENTITY_TYPES tells the target program how many entity types there are.
+NUM_TAG_TYPES :: %1;
+
+// entity_types is an array containing all the entity types.
+tag_types : [%1] Type : .[ %2 ];
+DONE
+
+// The metaprogram will call generate_code at compile-time because of
+// the @RunWhenReady note you will see if you skip to the end and look there.
+generate_code :: () {
+    // Because we're inside the target program, we do not have a message loop
+    // running. But we can browse through the type table to look for
+    // subclasses of Entity. Since the metaprogram only calls this routine
+    // when everything is typechecked, and no additional entities are added
+    // during subsequent waves of code generation (and no entities depend
+    // on code that is generated for any of their members to be defined),
+    // we know everything is ready by the time we are called.
+
+    w := get_current_workspace();
+    table := get_type_table(w);
+
+    entity_type_names: [..] string;
+
+    for table {
+        if it.type != .STRUCT continue;
+
+        info_struct := cast(*Type_Info_Struct) it;
+
+        if is_subclass_of(it, "Tag") {
+            array_add(*entity_type_names, info_struct.name);
+        }
+    }
+
+    // Let's sort the entity_type_names alphabetically, which is nice, but also
+    // gives us a reproducible build order, since our metaprogram may see these
+    // entities in any order:
+
+    quick_sort(entity_type_names, compare_strings);
+
+    // Generate a comma-separated string of entity type names:
+    type_names := join(..entity_type_names, ", ");
+
+    // We will also want to generate entity_storage_string, which contains a bunch of Bucket_Arrays
+    // for allocating each entity type. We might be able to do this with join() again, but
+    // we'll use String_Builder here, since that is a good example of how to do arbitrarily complex things:
+
+    entity_storage_string: string;
+    {
+        builder: String_Builder;
+
+        for entity_type_names {
+            // Let's say it's always 20 items per bucket,
+            // unless it's Player, in which case we want 64:
+
+            items_per_bucket := 20;
+            if it == "Player"  items_per_bucket = 64;
+
+            print_to_builder(*builder, "    _%1: Bucket_Array(%1, %2, true);\n", it, items_per_bucket);
+        }
+
+        entity_storage_string = builder_to_string(*builder);
+    }
+
+    // We fill out INSERTION_STRING to create the code we want to insert:
+    build_string := sprint(INSERTION_STRING, entity_type_names.count, type_names, entity_storage_string);
+
+    // Add this string to the program. Because we provide no workspace argument,
+    // it defaults to our current workspace.
+    add_build_string(build_string, w = -1);
+    
+
+    // We'll print out the added code just to show at compile-time what we are doing:
+    print("Adding build string:\n%\n", build_string);
+} @RunWhenReady
 
 
 #scope_file
 #import "Hash_Table";
+#import "Compiler";

@@ -19,14 +19,14 @@ DrawSettings :: struct {
     font : *Simp.Dynamic_Font = null;
     text_size : float = 14.0;
 
-    transform_stack: *[MAX_TRANSFORM_STACK_SIZE]Matrix3;    // dynamic array of matrices
+    transform_stack: *[MAX_TRANSFORM_STACK_SIZE]Matrix4;    // dynamic array of matrices
     transform_stack_top: int = 0;
 }
 
 init_simproc :: () {
     using context.draw_settings;
-    transform_stack = New([MAX_TRANSFORM_STACK_SIZE]Matrix3);
-    transform_stack.*[0] = Matrix3_Identity;
+    transform_stack = New([MAX_TRANSFORM_STACK_SIZE]Matrix4);
+    transform_stack.*[0] = Matrix4_Identity;
 }
 
 fill :: (color: Vector4) {
@@ -87,10 +87,10 @@ image :: (texture: *Simp.Texture, position: Vector2, size: Vector2) {
     old_settings := context.draw_settings;
     fill_enabled = true;
     transform := transform_stack.*[transform_stack_top];
-    p0 := transform * Vector3.{position.x + size.x * 0.5, position.y + size.y * 0.5, 1};
-    p1 := transform * Vector3.{position.x - size.x * 0.5, position.y + size.y * 0.5, 1};
-    p2 := transform * Vector3.{position.x - size.x * 0.5, position.y - size.y * 0.5, 1};
-    p3 := transform * Vector3.{position.x + size.x * 0.5, position.y - size.y * 0.5, 1};
+    p0 := (transform * Vector4.{position.x + size.x * 0.5, position.y + size.y * 0.5, 1.0, 1.0}).xyz;
+    p1 := (transform * Vector4.{position.x - size.x * 0.5, position.y + size.y * 0.5, 1.0, 1.0}).xyz;
+    p2 := (transform * Vector4.{position.x - size.x * 0.5, position.y - size.y * 0.5, 1.0, 1.0}).xyz;
+    p3 := (transform * Vector4.{position.x + size.x * 0.5, position.y - size.y * 0.5, 1.0, 1.0}).xyz;
     Simp.immediate_quad(
         p0,
         p1,
@@ -106,8 +106,8 @@ line :: (point_a: Vector2, point_b: Vector2, line_width : float = 2.0) {
     using context.draw_settings;
     if stroke_enabled {
         transform := transform_stack.*[transform_stack_top];
-        point_a_transformed := transform * Vector3.{point_a.x, point_a.y, 1.0};
-        point_b_transformed := transform * Vector3.{point_b.x, point_b.y, 1.0};
+        point_a_transformed := (transform * Vector4.{point_a.x, point_a.y, 1.0, 1.0}).xyz;
+        point_b_transformed := (transform * Vector4.{point_b.x, point_b.y, 1.0, 1.0}).xyz;
         slope := normalize(point_a_transformed - point_b_transformed);
         normal := Vector3.{-slope.y, slope.x, 1.0};
         Simp.immediate_quad(
@@ -125,10 +125,10 @@ rect :: (position: Vector2, size: Vector2) {
     using context.draw_settings;
     if context.draw_settings.fill_enabled {
         transform := transform_stack.*[transform_stack_top];
-        pos1 := transform * Vector3.{position.x - size.x * 0.5, position.y - size.y * 0.5, 1.0};
-        pos2 := transform * Vector3.{position.x + size.x * 0.5, position.y - size.y * 0.5, 1.0};
-        pos3 := transform * Vector3.{position.x + size.x * 0.5, position.y + size.y * 0.5, 1.0};
-        pos4 := transform * Vector3.{position.x - size.x * 0.5, position.y + size.y * 0.5, 1.0};
+        pos1 := (transform * Vector4.{position.x - size.x * 0.5, position.y - size.y * 0.5, 1.0, 1.0}).xyz;
+        pos2 := (transform * Vector4.{position.x + size.x * 0.5, position.y - size.y * 0.5, 1.0, 1.0}).xyz;
+        pos3 := (transform * Vector4.{position.x + size.x * 0.5, position.y + size.y * 0.5, 1.0, 1.0}).xyz;
+        pos4 := (transform * Vector4.{position.x - size.x * 0.5, position.y + size.y * 0.5, 1.0, 1.0}).xyz;
         Simp.immediate_quad(
             pos1,
             pos2,
@@ -146,6 +146,46 @@ rect :: (position: Vector2, size: Vector2) {
     
 }
 
+capsule :: (position: Vector2, radius: float, height: float, segments: s32 = 36) {
+    using context.draw_settings;
+    if fill_enabled {
+        prev_stroke_state := stroke_enabled;
+        no_stroke();
+        rect(position, .{radius * 2.0, height});
+        circle(position + .{0, -height/2.0}, radius, segments);
+        circle(position + .{0, height/2.0}, radius, segments);
+        stroke_enabled = prev_stroke_state;
+    }
+
+    if stroke_enabled {
+        if segments % 2 != 0 {
+            segments += 1;
+        }
+        step := (2 * PI) / cast(float)segments;
+        half_way := segments / 2;
+        center := position + .{0, height/2.0};
+        for i : 0..segments-1 {
+            if i == half_way {
+                center = position + .{0, -height/2.0};
+            }
+            
+            angle1 := step * i.(float);
+            x1 := center.x + radius * cos(angle1);
+            y1 := center.y + radius * sin(angle1);
+
+            angle2 := 2 * 3.14159 * (i + 1) / segments;
+            x2 := center.x + radius * cos(angle2);
+            y2 := center.y + radius * sin(angle2);
+            line(.{x1, y1}, .{x2, y2}, stroke_width);
+        }
+        line(position + .{-radius, height/2.0}, position + .{-radius, -height/2.0}, stroke_width);
+        line(position + .{radius, height/2.0}, position + .{radius, -height/2.0}, stroke_width);
+    }
+
+    
+    
+}
+
 ellipse :: (position: Vector2, radii: Vector2, segments: int = 36) {
     using context.draw_settings;
 
@@ -156,24 +196,24 @@ ellipse :: (position: Vector2, radii: Vector2, segments: int = 36) {
         center_uv : Vector2 = .{0.5, 0.5};
         for i : 0..segments-1 {
             // Center vertex
-            pos0 := transform * Vector3.{position.x, position.y, 1.0};
-            Simp.immediate_vertex(pos0, fill, .{}, .{});
+            pos0 := transform * Vector4.{position.x, position.y, 1.0, 1.0};
+            Simp.immediate_vertex(pos0.xyz, fill, .{}, .{});
             
             // Current perimeter vertex
             angle1 := step * i.(float);
             x1 := position.x + radii.x * cos(angle1);
             y1 := position.y + radii.y * sin(angle1);
             //uv1 : Vector2 = .{(cos(angle1) * 0.5) + 0.5, (sin(angle1) * 0.5) + 0.5};
-            pos1 := transform * Vector3.{x1, y1, 1.0};
-            Simp.immediate_vertex(pos1, fill, .{}, .{z=1});
+            pos1 := transform * Vector4.{x1, y1, 1.0, 1.0};
+            Simp.immediate_vertex(pos1.xyz, fill, .{}, .{z=1});
             
             // Next perimeter vertex
             angle2 := 2 * 3.14159 * (i + 1) / segments;
             x2 := position.x + radii.x * cos(angle2);
             y2 := position.y + radii.y * sin(angle2);
             //uv2 : Vector2 = .{(cos(angle2) * 0.5) + 0.5, (sin(angle2) * 0.5) + 0.5};
-            pos2 := transform * Vector3.{x2, y2, 1.0};
-            Simp.immediate_vertex(pos2, fill, .{}, .{z=1});
+            pos2 := transform * Vector4.{x2, y2, 1.0, 1.0};
+            Simp.immediate_vertex(pos2.xyz, fill, .{}, .{z=1});
         }
     }
     if stroke_enabled {
@@ -195,9 +235,9 @@ triangle :: (point_a: Vector2, point_b: Vector2, point_c: Vector2) {
 
     using context.draw_settings;
     transform := transform_stack.*[transform_stack_top];
-    point_a_transformed := transform * Vector3.{point_a.x, point_a.y, 1.0};
-    point_b_transformed := transform * Vector3.{point_b.x, point_b.y, 1.0};
-    point_c_transformed := transform * Vector3.{point_c.x, point_c.y, 1.0};
+    point_a_transformed := (transform * Vector4.{point_a.x, point_a.y, 1.0}).xyz;
+    point_b_transformed := (transform * Vector4.{point_b.x, point_b.y, 1.0}).xyz;
+    point_c_transformed := (transform * Vector4.{point_c.x, point_c.y, 1.0}).xyz;
 
     if fill_enabled {
         Simp.immediate_triangle(
